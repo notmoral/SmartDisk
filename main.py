@@ -125,6 +125,18 @@ class Api:
         if self._window:
             self._window.evaluate_js(f"window.updateUI({json.dumps(data)})")
 
+    def delete_multiple_files(self, paths):
+        deleted = 0
+        errors = []
+        for path in paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+                    deleted += 1
+            except Exception as e:
+                errors.append(f"{path}: {str(e)}")
+        return {"status": "success", "deleted": deleted, "errors": errors}
+
 if __name__ == '__main__':
     api = Api()
     window = webview.create_window(

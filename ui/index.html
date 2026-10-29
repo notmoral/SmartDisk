@@ -53,16 +53,7 @@
             flex-direction: column;
         }
 
-        .titlebar {
-            height: 40px;
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            padding: 0 16px;
-            background: transparent;
-            z-index: 10000;
-        }
-
+        .titlebar { height: 40px; display: flex; justify-content: flex-end; align-items: center; padding: 0 16px; background: transparent; z-index: 10000; }
         .window-controls { display: flex; align-items: center; gap: 16px; }
         .theme-toggle { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; color: var(--icon-color); transition: transform 0.2s; }
         .theme-toggle:hover { transform: scale(1.1); }
@@ -104,11 +95,19 @@
         .sort-btn:hover { color: var(--text-main); }
         .sort-btn.active { background: var(--bg-panel); color: var(--text-main); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
 
-        .filter-badge { display: none; align-items: center; gap: 8px; background: var(--accent); color: var(--accent-text); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
+        .filter-badge { display: none; align-items: center; gap: 8px; background: var(--accent); color: var(--accent-text); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 10px; width: fit-content; }
         .filter-badge.active { display: inline-flex; }
 
-        .item-row { background: var(--bg-item); border-radius: 12px; margin-bottom: 8px; padding: 16px; display: grid; grid-template-columns: 2fr 1fr 1.5fr 0.8fr auto; gap: 15px; align-items: center; border: 1px solid transparent; transition: all 0.2s; }
+        /* Панель массового удаления */
+        .bulk-actions { display: none; align-items: center; gap: 15px; background: var(--bg-item); padding: 10px 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid var(--border); }
+        .bulk-actions.active { display: flex; }
+        .bulk-actions span { font-size: 13px; font-weight: 600; }
+        .bulk-actions button { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; font-size: 12px; background: var(--danger); color: white; transition: opacity 0.2s;}
+        .bulk-actions button:hover { opacity: 0.8; }
+
+        .item-row { background: var(--bg-item); border-radius: 12px; margin-bottom: 8px; padding: 16px; display: grid; grid-template-columns: auto 2fr 1fr 1.2fr 0.8fr auto; gap: 15px; align-items: center; border: 1px solid transparent; transition: all 0.2s; }
         .item-row:hover { background: var(--bg-item-hover); border-color: var(--border); }
+        .item-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
         .item-path { font-family: 'Consolas', monospace; font-size: 13px; color: var(--text-main); word-break: break-all; }
         .item-info { font-size: 12px; color: var(--text-muted); font-weight: 500; }
         .item-type { background: var(--border); padding: 2px 6px; border-radius: 4px; text-transform: uppercase; font-size: 10px; text-align: center; width: fit-content;}
@@ -121,8 +120,8 @@
 
         .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .chart-select { background: var(--bg-item); color: var(--text-main); border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 500; outline: none; cursor: pointer; }
-
         .chart-container { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; }
+        
         .progress-container { position: absolute; bottom: 0; left: 0; width: 100%; height: 2px; overflow: hidden; }
         #progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s ease; }
 
@@ -216,6 +215,12 @@
                         <button class="sort-btn" onclick="changeSort('type', this)">Тип</button>
                     </div>
                 </div>
+                
+                <div class="bulk-actions" id="bulk-actions">
+                    <span id="selected-count">Выбрано: 0</span>
+                    <button onclick="deleteSelected()">Удалить выбранные</button>
+                </div>
+
                 <div class="filter-badge" id="type-filter" onclick="clearFilter()">Фильтр: <span id="filter-ext"></span> ✕</div>
                 <div id="duplicates-list"></div>
             </div>
@@ -306,6 +311,7 @@
         let globalStats = {};
         let currentSort = 'size';
         let activeFilter = null;
+        let selectedPaths = new Set();
 
         const tips = [
             { t: "Дефрагментация", d: "Для HDD раз в полгода полезно делать дефрагментацию диска, а для SSD — проверку TRIM." },
@@ -408,6 +414,8 @@
             document.getElementById('large-files-list').innerHTML = '';
             document.getElementById('empty-folders-list').innerHTML = '';
             clearFilter();
+            selectedPaths.clear();
+            updateBulkPanel();
             
             const loader = document.getElementById('loader-overlay');
             loader.classList.add('active');
@@ -431,6 +439,58 @@
             }
         }
 
+        function updateBulkPanel() {
+            const panel = document.getElementById('bulk-actions');
+            const count = document.getElementById('selected-count');
+            if (selectedPaths.size > 0) {
+                panel.classList.add('active');
+                count.innerText = `Выбрано: ${selectedPaths.size}`;
+            } else {
+                panel.classList.remove('active');
+            }
+        }
+
+        function toggleSelect(path, checkbox) {
+            if (checkbox.checked) selectedPaths.add(path);
+            else selectedPaths.delete(path);
+            updateBulkPanel();
+        }
+
+        function selectGroup(checkbox) {
+            const checked = checkbox.checked;
+            const groupContainer = checkbox.closest('.dup-group-container');
+            const rows = groupContainer.querySelectorAll('.item-checkbox');
+            
+            rows.forEach(cb => {
+                cb.checked = checked;
+                const p = cb.getAttribute('data-path');
+                if (checked) selectedPaths.add(p);
+                else selectedPaths.delete(p);
+            });
+            updateBulkPanel();
+        }
+
+        async function deleteSelected() {
+            if (selectedPaths.size === 0) return;
+            if (!confirm(`Вы уверены, что хотите безвозвратно удалить ${selectedPaths.size} файлов?`)) return;
+
+            const pathsArray = Array.from(selectedPaths);
+            const res = await window.pywebview.api.delete_multiple_files(pathsArray);
+            
+            if (res.status === 'success') {
+                selectedPaths.clear();
+                updateBulkPanel();
+                document.querySelectorAll('.item-checkbox').forEach(cb => {
+                    if (pathsArray.includes(cb.getAttribute('data-path'))) {
+                        cb.closest('.item-row').remove();
+                    }
+                });
+                if(res.errors.length > 0) alert('Некоторые файлы не удалось удалить:\n' + res.errors.join('\n'));
+            } else {
+                alert('Ошибка при удалении: ' + res.errors.join('\n'));
+            }
+        }
+
         function changeSort(criteria, btn) {
             document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
             if (btn) btn.classList.add('active');
@@ -444,7 +504,7 @@
             renderDuplicates();
         }
 
-                function setFilter(ext) {
+        function setFilter(ext) {
             activeFilter = ext;
             document.getElementById('filter-ext').innerText = ext;
             document.getElementById('type-filter').classList.add('active');
@@ -452,9 +512,11 @@
             renderDuplicates();
         }
 
-                function renderDuplicates() {
+        function renderDuplicates() {
             const container = document.getElementById('duplicates-list');
             container.innerHTML = '';
+            selectedPaths.clear(); 
+            updateBulkPanel();
             
             let filtered = activeFilter 
                 ? globalDuplicates.filter(g => g.ext === activeFilter)
@@ -473,12 +535,12 @@
             else if (currentSort === 'date') filtered.sort((a, b) => b.files[0].mtime - a.files[0].mtime);
             else if (currentSort === 'type') filtered.sort((a, b) => a.ext.localeCompare(b.ext));
 
-            // Ограничиваем рендеринг максимум 100 группами для плавности
             const renderLimit = 100;
             const toRender = filtered.slice(0, renderLimit);
 
             toRender.forEach(group => {
                 const div = document.createElement('div');
+                div.className = 'dup-group-container';
                 div.style.marginBottom = '24px';
                 
                 let pathsHtml = group.files.map(f => {
@@ -488,6 +550,7 @@
                     
                     return `
                         <div class="item-row">
+                            <input type="checkbox" class="item-checkbox" data-path="${safePath}" onchange="toggleSelect('${safePath}', this)">
                             <span class="item-path">${f.path}</span>
                             <span class="item-info">${sizeStr}</span>
                             <span class="item-info">${dateStr}</span>
@@ -500,12 +563,17 @@
                     `;
                 }).join('');
 
-                let hiddenHtml = '';
-                if (group.hidden_count > 0) {
-                    hiddenHtml = `<div style="padding: 12px 16px; font-size: 12px; color: var(--text-muted); text-align: center; background: var(--bg-item); border-radius: 8px; margin-top: 8px;">... и еще ${group.hidden_count} файлов в этой группе</div>`;
-                }
+                let hiddenHtml = group.hidden_count > 0 ? `<div style="padding: 12px; font-size: 12px; color: var(--text-muted); text-align: center; background: var(--bg-item); border-radius: 8px; margin-top: 8px;">... и еще ${group.hidden_count} файлов</div>` : '';
                 
-                div.innerHTML = `<div class="item-meta" style="margin-bottom: 8px; color: var(--text-muted); font-weight:600;">Группа (${group.count} шт.)</div>${pathsHtml}${hiddenHtml}`;
+                div.innerHTML = `
+                    <div class="item-meta" style="display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--text-muted); font-weight:600;">
+                        <span>Группа (${group.count} шт.)</span>
+                        <label style="cursor:pointer; font-size:12px; display:flex; align-items:center; gap:5px;">
+                            <input type="checkbox" onchange="selectGroup(this)"> Выбрать всю группу
+                        </label>
+                    </div>
+                    ${pathsHtml}${hiddenHtml}
+                `;
                 container.appendChild(div);
             });
 
@@ -514,7 +582,7 @@
                 moreDiv.style.textAlign = 'center';
                 moreDiv.style.padding = '20px';
                 moreDiv.style.color = 'var(--text-muted)';
-                moreDiv.innerText = `Показаны первые ${renderLimit} из ${filtered.length} групп. Уточните фильтр или поиск, чтобы увидеть остальные.`;
+                moreDiv.innerText = `Показаны первые ${renderLimit} из ${filtered.length} групп. Уточните фильтр.`;
                 container.appendChild(moreDiv);
             }
         }
@@ -529,6 +597,8 @@
                     ? await window.pywebview.api.delete_folder(path)
                     : await window.pywebview.api.delete_file(path);
                 if (res.status === 'success') {
+                    selectedPaths.delete(path);
+                    updateBulkPanel();
                     const row = btn.closest('.item-row');
                     row.style.opacity = '0';
                     setTimeout(() => row.remove(), 200);
@@ -590,9 +660,9 @@
                 const div = document.createElement('div');
                 div.className = 'item-row';
                 div.innerHTML = `
-                    <span class="item-path">${f.path}</span>
+                    <span class="item-path" style="grid-column: 1 / 3;">${f.path}</span>
                     <span class="item-info">${f.size_mb} МБ</span>
-                    <div class="actions" style="grid-column: 5;">
+                    <div class="actions" style="grid-column: 6;">
                         <button class="icon-btn" data-path="${safePath}" onclick="handleAction(this, 'open')">Открыть</button>
                         <button class="icon-btn delete-btn" data-path="${safePath}" onclick="handleAction(this, 'delete')">Удалить</button>
                     </div>
@@ -613,8 +683,8 @@
                 const div = document.createElement('div');
                 div.className = 'item-row';
                 div.innerHTML = `
-                    <span class="item-path" style="grid-column: 1 / 4;">${folderPath}</span>
-                    <div class="actions" style="grid-column: 5;">
+                    <span class="item-path" style="grid-column: 1 / 5;">${folderPath}</span>
+                    <div class="actions" style="grid-column: 6;">
                         <button class="icon-btn" data-path="${safePath}" onclick="handleAction(this, 'open', true)">Открыть</button>
                         <button class="icon-btn delete-btn" data-path="${safePath}" onclick="handleAction(this, 'delete', true)">Удалить</button>
                     </div>
@@ -670,7 +740,7 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     cutout: '80%',
-                    animation: false, 
+                    animation: false,
                     onClick: (e, elements) => {
                         if (elements.length > 0) {
                             const index = elements[0].index;
