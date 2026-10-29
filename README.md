@@ -24,33 +24,28 @@
 Для работы требуются установленные Python (3.10+) и Rust (Cargo).
 
 **Клонирование репозитория:**
-   
- ```bash
- git clone https://github.com/notmoral/SmartDisk.git
- cd SmartDisk
-    
+```bash
+git clone https://github.com/notmoral/SmartDisk.git
+cd SmartDisk
 Настройка виртуального окружения и зависимостей:
 
-```bash
+bash
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 pip install maturin
-
 Сборка нативного ядра (Rust):
 Примечание: флаг PYO3_USE_ABI3_FORWARD_COMPATIBILITY необходим для совместимости с новыми версиями Python (например, 3.14).
 
-```bash
+bash
 cd rust_core
 set PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
 maturin develop --release
 cd ..
-
 Запуск приложения:
 
-```bash
+bash
 venv\Scripts\python.exe main.py
-
 Планы по развитию (Roadmap)
 ☑ Перенос вычислительного ядра на Rust для повышения производительности.
 ☑ Разработка современного пользовательского интерфейса.
@@ -59,9 +54,10 @@ venv\Scripts\python.exe main.py
 □ Внедрение парсинга MFT (Master File Table) для кратного ускорения сканирования дисков NTFS.
 Если вы обнаружите ошибки или у вас есть предложения по улучшению, пожалуйста, создайте Issue в репозитории.
 
-После сохранения файла выполни в терминале:
+text
 
+После того как сохранил файл, **в терминале** (в VS Code) выполни:
 ```bash
 git add README.md
-git commit -m "docs: update README with official project description"
+git commit -m "docs: fix README formatting"
 git push
