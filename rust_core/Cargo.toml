@@ -1,0 +1,14 @@
+[package]
+name = "smartdisk_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "smartdisk_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+jwalk = "0.8"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+rayon = "1.10"

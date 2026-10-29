@@ -1,34 +1,29 @@
-"""Модуль сканирования файловой системы."""
 import os
-from pathlib import Path
+import string
 
+def get_all_drives():
+    return [f"{letter}:\\" for letter in string.ascii_uppercase if os.path.exists(f"{letter}:\\")]
 
-def scan_directory(root_path: str, progress_callback=None) -> list[Path]:
-    """
-    Рекурсивно обходит папку и возвращает список всех файлов.
+def find_empty_folders(root_paths):
+    empty_folders = []
+    ignore_dirs = {'windows', '$recycle.bin', 'system volume information', 'recovery', 'perflogs'}
+    
+    for root in root_paths:
+        for dirpath, dirnames, filenames in os.walk(root, topdown=False, onerror=lambda x: None):
+            dirnames[:] = [d for d in dirnames if d.lower() not in ignore_dirs]
+            if not dirnames and not filenames and dirpath != root:
+                if not any(ig in dirpath.lower() for ig in ignore_dirs):
+                    empty_folders.append(dirpath)
+    return empty_folders
 
-    :param root_path: путь к папке для сканирования
-    :param progress_callback: функция(текущий, всего) для обновления прогресса
-    :return: список объектов Path
-    """
-    root = Path(root_path)
-    if not root.exists() or not root.is_dir():
-        raise ValueError(f"Папка не существует: {root_path}")
-
-    files = []
-    for dirpath, _, filenames in os.walk(root):
-        for name in filenames:
-            files.append(Path(dirpath) / name)
-
-    if progress_callback:
-        progress_callback(len(files), len(files))
-
-    return files
-
-
-def get_file_size(path: Path) -> int:
-    """Возвращает размер файла в байтах, 0 если недоступен."""
-    try:
-        return path.stat().st_size
-    except (OSError, PermissionError):
-        return 0
+def find_large_files_py(files, limit=50):
+    file_data = []
+    for f in files:
+        try:
+            size = os.path.getsize(f)
+            if size > 50 * 1024 * 1024:
+                file_data.append((f, size))
+        except:
+            pass
+    file_data.sort(key=lambda x: x[1], reverse=True)
+    return [{"path": str(f), "size_mb": round(size / (1024 * 1024), 2)} for f, size in file_data[:limit]]

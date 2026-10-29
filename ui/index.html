@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>SmartDisk</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --bg-app: #e4e4e7;
+            --bg-sidebar: rgba(255, 255, 255, 0.4);
+            --bg-panel: rgba(255, 255, 255, 0.6);
+            --bg-item: rgba(255, 255, 255, 0.5);
+            --bg-item-hover: #ffffff;
+            --text-main: #18181b;
+            --text-muted: #71717a;
+            --accent: #18181b;
+            --accent-text: #ffffff;
+            --border: rgba(255, 255, 255, 0.8);
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            --danger: #ef4444;
+            --blur-bg: rgba(228, 228, 231, 0.7);
+            --icon-color: #18181b;
+        }
+
+        [data-theme="dark"] {
+            --bg-app: #09090b;
+            --bg-sidebar: rgba(24, 24, 27, 0.6);
+            --bg-panel: rgba(24, 24, 27, 0.8);
+            --bg-item: rgba(39, 39, 42, 0.6);
+            --bg-item-hover: rgba(63, 63, 70, 0.8);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --accent: #f4f4f5;
+            --accent-text: #09090b;
+            --border: rgba(255, 255, 255, 0.1);
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            --danger: #f87171;
+            --blur-bg: rgba(9, 9, 11, 0.7);
+            --icon-color: #f4f4f5;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background: var(--bg-app);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .titlebar {
+            height: 40px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0 16px;
+            background: transparent;
+            z-index: 10000;
+        }
+
+        .window-controls { display: flex; align-items: center; gap: 16px; }
+        .theme-toggle { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; color: var(--icon-color); transition: transform 0.2s; }
+        .theme-toggle:hover { transform: scale(1.1); }
+        .theme-toggle svg { width: 18px; height: 18px; fill: currentColor; }
+        .mac-buttons { display: flex; gap: 8px; margin-left: 8px;}
+        .window-btn { width: 12px; height: 12px; border-radius: 50%; border: none; cursor: pointer; padding: 0; }
+        .window-btn.close { background: #ff5f56; }
+        .window-btn.minimize { background: #ffbd2e; }
+        .window-btn.maximize { background: #27c93f; }
+        .window-btn:hover { opacity: 0.8; }
+
+        .app-container { flex: 1; display: flex; padding: 0 24px 24px 24px; gap: 24px; overflow: hidden; }
+
+        .sidebar { width: 280px; background: var(--bg-sidebar); backdrop-filter: blur(40px); border: 1px solid var(--border); border-radius: 24px; padding: 24px; display: flex; flex-direction: column; box-shadow: var(--shadow); }
+        .logo { font-size: 20px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 32px; text-align: center; color: var(--text-main); }
+        .nav-group { display: flex; flex-direction: column; gap: 8px; }
+        .nav-item { padding: 12px 16px; border-radius: 12px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-muted); transition: all 0.2s; }
+        .nav-item:hover { background: var(--bg-item); color: var(--text-main); }
+        .nav-item.active { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+        .controls { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+        button.primary { width: 100%; background: var(--accent); color: var(--accent-text); border: none; padding: 16px; border-radius: 12px; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        button.primary:hover { opacity: 0.9; transform: scale(0.98); }
+
+        .main-panel { flex: 1; background: var(--bg-panel); backdrop-filter: blur(40px); border: 1px solid var(--border); border-radius: 24px; padding: 32px; display: flex; flex-direction: column; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+        .dashboard { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 32px; margin-top: 10px;}
+        .stat-item { background: var(--bg-item); padding: 20px; border-radius: 16px; border: 1px solid var(--border); }
+        .stat-title { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
+        .stat-value { font-size: 32px; font-weight: 300; letter-spacing: -1px; }
+
+        .view-container { flex: 1; overflow-y: auto; display: none; flex-direction: column; }
+        .view-container.active { display: flex; }
+        .view-container::-webkit-scrollbar { width: 4px; }
+        .view-container::-webkit-scrollbar-track { background: transparent; }
+        .view-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        .list-header { font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; align-items: center;}
+        .sort-controls { display: flex; gap: 8px; background: var(--bg-item); padding: 4px; border-radius: 10px; }
+        .sort-btn { background: transparent; border: none; color: var(--text-muted); font-size: 12px; font-weight: 500; padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+        .sort-btn:hover { color: var(--text-main); }
+        .sort-btn.active { background: var(--bg-panel); color: var(--text-main); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+
+        .filter-badge { display: none; align-items: center; gap: 8px; background: var(--accent); color: var(--accent-text); padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
+        .filter-badge.active { display: inline-flex; }
+
+        .item-row { background: var(--bg-item); border-radius: 12px; margin-bottom: 8px; padding: 16px; display: grid; grid-template-columns: 2fr 1fr 1.5fr 0.8fr auto; gap: 15px; align-items: center; border: 1px solid transparent; transition: all 0.2s; }
+        .item-row:hover { background: var(--bg-item-hover); border-color: var(--border); }
+        .item-path { font-family: 'Consolas', monospace; font-size: 13px; color: var(--text-main); word-break: break-all; }
+        .item-info { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+        .item-type { background: var(--border); padding: 2px 6px; border-radius: 4px; text-transform: uppercase; font-size: 10px; text-align: center; width: fit-content;}
+        
+        .actions { display: flex; gap: 8px; opacity: 0; transition: opacity 0.2s; }
+        .item-row:hover .actions { opacity: 1; }
+        .icon-btn { padding: 8px 12px; border-radius: 8px; background: transparent; border: 1px solid var(--border); color: var(--text-main); cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s; }
+        .icon-btn:hover { background: var(--bg-panel); }
+        .icon-btn.delete-btn:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .chart-select { background: var(--bg-item); color: var(--text-main); border: 1px solid var(--border); padding: 8px 12px; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 500; outline: none; cursor: pointer; }
+
+        .chart-container { flex: 1; display: flex; justify-content: center; align-items: center; position: relative; }
+        .progress-container { position: absolute; bottom: 0; left: 0; width: 100%; height: 2px; overflow: hidden; }
+        #progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s ease; }
+
+        .theme-transition-circle { position: fixed; border-radius: 50%; background: var(--bg-app); transform: scale(0); z-index: 9999; pointer-events: none; }
+
+        .modal-overlay { position: fixed; top: 40px; left: 0; width: 100vw; height: calc(100vh - 40px); background: var(--blur-bg); backdrop-filter: blur(20px); z-index: 9500; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 24px; padding: 32px; width: 600px; box-shadow: var(--shadow); transform: translateY(20px); transition: transform 0.3s ease; }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        .modal-title { font-size: 20px; font-weight: 600; margin-bottom: 24px; text-align: center; }
+        .scan-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .scan-card { background: var(--bg-item); border: 1px solid var(--border); border-radius: 16px; padding: 24px 16px; text-align: center; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+        .scan-card:hover { background: var(--bg-item-hover); transform: translateY(-5px); border-color: var(--text-muted); }
+        .scan-card svg { width: 32px; height: 32px; fill: var(--text-main); }
+        .scan-card span { font-size: 14px; font-weight: 500; }
+
+        .loader-overlay { position: fixed; top: 40px; left: 0; width: 100vw; height: calc(100vh - 40px); background: var(--blur-bg); backdrop-filter: blur(15px); z-index: 9000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+        .loader-overlay.active { opacity: 1; pointer-events: auto; }
+        .loader-content { display: flex; flex-direction: column; align-items: center; text-align: center; }
+        .radar-container { position: relative; width: 160px; height: 160px; display: flex; justify-content: center; align-items: center; margin-bottom: 24px; }
+        .radar-ring { position: absolute; border-radius: 50%; border: 1px solid var(--border); }
+        .ring-1 { width: 100%; height: 100%; opacity: 0.3; }
+        .ring-2 { width: 75%; height: 75%; opacity: 0.5; }
+        .ring-3 { width: 50%; height: 50%; opacity: 0.8; }
+        .radar-scan { position: absolute; width: 100%; height: 100%; border-radius: 50%; background: conic-gradient(from 0deg, transparent 70%, var(--text-main) 100%); animation: scan 1.5s linear infinite; mask-image: radial-gradient(circle, transparent 20%, black 80%); -webkit-mask-image: radial-gradient(circle, transparent 20%, black 80%); }
+        @keyframes scan { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .loader-percentage { font-size: 40px; font-weight: 300; letter-spacing: -1px; color: var(--text-main); z-index: 2; }
+        .loader-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; color: var(--text-main); }
+        .loader-subtitle { font-size: 13px; color: var(--text-muted); max-width: 400px; line-height: 1.5; margin-bottom: 24px; }
+        .current-file-container { font-family: 'Consolas', monospace; font-size: 11px; color: var(--text-muted); background: var(--bg-item); padding: 6px 12px; border-radius: 8px; max-width: 500px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 30px; border: 1px solid var(--border); opacity: 0.8; }
+        .tips-container { position: absolute; bottom: 40px; max-width: 600px; text-align: center; opacity: 0; transition: opacity 0.5s ease; }
+        .tips-container.show { opacity: 1; }
+        .tip-text { font-size: 14px; color: var(--text-main); font-weight: 500; margin-bottom: 4px; }
+        .tip-desc { font-size: 12px; color: var(--text-muted); }
+        .loader-pulse { position: absolute; width: 100%; height: 100%; background: radial-gradient(circle, var(--bg-panel) 0%, transparent 70%); opacity: 0.3; animation: pulseBg 3s ease-in-out infinite; z-index: -1; }
+        @keyframes pulseBg { 0%, 100% { transform: scale(1); opacity: 0.2; } 50% { transform: scale(1.1); opacity: 0.4; } }
+    </style>
+</head>
+<body>
+
+    <div class="titlebar pywebview-drag-region">
+        <div class="window-controls">
+            <div class="theme-toggle" onclick="toggleTheme(event)" id="theme-icon"></div>
+            <div class="mac-buttons">
+                <button class="window-btn minimize" onclick="window.pywebview.api.minimize()"></button>
+                <button class="window-btn maximize" onclick="window.pywebview.api.toggle_maximize()"></button>
+                <button class="window-btn close" onclick="window.pywebview.api.close()"></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="logo">SmartDisk</div>
+            <div class="nav-group">
+                <div class="nav-item active" onclick="switchView('view-dups', this)">Дубликаты</div>
+                <div class="nav-item" onclick="switchView('view-large', this)">Большие файлы</div>
+                <div class="nav-item" onclick="switchView('view-empty', this)">Пустые папки</div>
+                <div class="nav-item" onclick="switchView('view-chart', this)">Статистика</div>
+            </div>
+
+            <div class="controls">
+                <div id="folder-path" style="font-size: 11px; color: var(--text-muted); text-align: center; margin-bottom: 8px; min-height: 16px;">Зона не выбрана</div>
+                <button class="primary" onclick="openScanModal()" id="scan-btn">Сканировать</button>
+            </div>
+        </div>
+
+        <div class="main-panel">
+            <div class="dashboard">
+                <div class="stat-item">
+                    <div class="stat-title">Всего файлов</div>
+                    <div class="stat-value" id="val-total">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-title">Групп дублей</div>
+                    <div class="stat-value" id="val-dups">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-title">Свободно (МБ)</div>
+                    <div class="stat-value" id="val-space">0</div>
+                </div>
+            </div>
+
+            <div id="view-dups" class="view-container active">
+                <div class="list-header">
+                    Найденные дубликаты
+                    <div class="sort-controls">
+                        <button class="sort-btn active" onclick="changeSort('size', this)">Размер</button>
+                        <button class="sort-btn" onclick="changeSort('name', this)">Имя</button>
+                        <button class="sort-btn" onclick="changeSort('date', this)">Дата</button>
+                        <button class="sort-btn" onclick="changeSort('type', this)">Тип</button>
+                    </div>
+                </div>
+                <div class="filter-badge" id="type-filter" onclick="clearFilter()">Фильтр: <span id="filter-ext"></span> ✕</div>
+                <div id="duplicates-list"></div>
+            </div>
+
+            <div id="view-large" class="view-container">
+                <div class="list-header">Топ файлов по размеру</div>
+                <div id="large-files-list"></div>
+            </div>
+
+            <div id="view-empty" class="view-container">
+                <div class="list-header">Пустые папки</div>
+                <div id="empty-folders-list"></div>
+            </div>
+
+            <div id="view-chart" class="view-container">
+                <div class="chart-header">
+                    <div style="font-weight: 600;">Статистика по типам</div>
+                    <select class="chart-select" id="chart-criteria" onchange="renderChart()">
+                        <option value="size">По размеру (МБ)</option>
+                        <option value="count">По количеству (шт.)</option>
+                    </select>
+                </div>
+                <div class="chart-container"><canvas id="myChart"></canvas></div>
+            </div>
+            
+            <div class="progress-container"><div id="progress-bar"></div></div>
+        </div>
+    </div>
+
+    <div id="scan-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title">Что будем сканировать?</div>
+            <div class="scan-options">
+                <div class="scan-card" onclick="startScan('PC')">
+                    <svg viewBox="0 0 24 24"><path d="M4 4h16v12H4V4zm2 2v8h12V6H6zm2 12h8v2H8v-2z"/></svg>
+                    <span>Весь ПК</span>
+                </div>
+                <div class="scan-card" onclick="startScan('DRIVE')">
+                    <svg viewBox="0 0 24 24"><path d="M4 6h16v4H4V6zm0 6h16v6H4v-6zm14 2h-2v2h2v-2z"/></svg>
+                    <span>Выбрать диск</span>
+                </div>
+                <div class="scan-card" onclick="startScan('FOLDER')">
+                    <svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+                    <span>Выбрать папку</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loader-overlay" class="loader-overlay">
+        <div class="loader-content">
+            <div class="radar-container">
+                <div class="loader-pulse"></div>
+                <div class="radar-ring ring-1"></div>
+                <div class="radar-ring ring-2"></div>
+                <div class="radar-ring ring-3"></div>
+                <div class="radar-scan"></div>
+                <div class="loader-percentage" id="loader-percentage">0%</div>
+            </div>
+            <h2 class="loader-title">Анализ дискового пространства</h2>
+            <p class="loader-subtitle">Пожалуйста, не закрывайте приложение.</p>
+            <div class="current-file-container" id="current-file-display">Ожидание...</div>
+        </div>
+        <div class="tips-container" id="tips-container">
+            <div class="tip-text" id="tip-title">Совет</div>
+            <div class="tip-desc" id="tip-desc"></div>
+        </div>
+    </div>
+
+    <script>
+        const moonIcon = `<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>`;
+        const sunIcon = `<svg viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 0 0 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>`;
+
+        const userPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        let isDarkTheme = userPrefersDark;
+        document.documentElement.setAttribute('data-theme', isDarkTheme ? 'dark' : 'light');
+        
+        window.addEventListener('pywebviewready', function() {
+            updateThemeIcon();
+        });
+
+        function updateThemeIcon() {
+            document.getElementById('theme-icon').innerHTML = isDarkTheme ? sunIcon : moonIcon;
+        }
+
+        let chartInstance = null;
+        let globalDuplicates = [];
+        let globalStats = {};
+        let currentSort = 'size';
+        let activeFilter = null;
+
+        const tips = [
+            { t: "Дефрагментация", d: "Для HDD раз в полгода полезно делать дефрагментацию диска, а для SSD — проверку TRIM." },
+            { t: "Рабочий стол", d: "Не храните тяжелые файлы на рабочем столе — это замедляет загрузку системы." },
+            { t: "Корзина", d: "Удаленные файлы остаются в корзине и занимают место. Не забывайте ее чистить." },
+            { t: "Дубликаты", d: "Дубликаты фотографий и документов — главная причина нехватки места на диске." },
+            { t: "Кэш браузеров", d: "Браузеры кэшируют гигабайты данных. Периодически очищайте их кэш." }
+        ];
+        let currentTipIndex = -1;
+        let tipInterval = null;
+
+        let currentDisplayedPercent = 0;
+        let targetPercent = 0;
+        
+        setInterval(() => {
+            if (currentDisplayedPercent < targetPercent) {
+                currentDisplayedPercent++;
+                document.getElementById('loader-percentage').innerText = `${currentDisplayedPercent}%`;
+            }
+        }, 20);
+
+        function showNextTip() {
+            currentTipIndex = (currentTipIndex + 1) % tips.length;
+            const tipTitle = document.getElementById('tip-title');
+            const tipDesc = document.getElementById('tip-desc');
+            const tipContainer = document.getElementById('tips-container');
+            tipContainer.classList.remove('show');
+            setTimeout(() => {
+                tipTitle.innerText = tips[currentTipIndex].t;
+                tipDesc.innerText = tips[currentTipIndex].d;
+                tipContainer.classList.add('show');
+            }, 400);
+        }
+
+        function switchView(viewId, navElement) {
+            document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+            if (navElement) navElement.classList.add('active');
+            if (viewId === 'view-chart') renderChart();
+        }
+
+        function toggleTheme(event) {
+            const btn = event.currentTarget;
+            const rect = btn.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            
+            const circle = document.createElement('div');
+            circle.className = 'theme-transition-circle';
+            circle.style.left = `${x}px`;
+            circle.style.top = `${y}px`;
+            const maxDist = Math.hypot(window.innerWidth, window.innerHeight);
+            circle.style.width = '0px';
+            circle.style.height = '0px';
+            document.body.appendChild(circle);
+            
+            isDarkTheme = !isDarkTheme;
+            circle.style.backgroundColor = isDarkTheme ? '#09090b' : '#e4e4e7';
+            
+            const anim = circle.animate([
+                { transform: 'scale(0)' },
+                { transform: `scale(${maxDist * 2})` }
+            ], { duration: 800, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' });
+            
+            anim.onfinish = () => {
+                document.documentElement.setAttribute('data-theme', isDarkTheme ? 'dark' : 'light');
+                updateThemeIcon();
+                circle.remove();
+                if (chartInstance) renderChart();
+            };
+        }
+
+        function openScanModal() { document.getElementById('scan-modal').classList.add('active'); }
+        function closeScanModal() { document.getElementById('scan-modal').classList.remove('active'); }
+
+        document.getElementById('scan-modal').addEventListener('mousedown', function(event) {
+            if (event.target === this) closeScanModal();
+        });
+
+        async function startScan(type) {
+            closeScanModal();
+            let pathToScan = "";
+
+            if (type === 'PC') {
+                pathToScan = "PC";
+                document.getElementById('folder-path').innerText = "Весь компьютер";
+            } else if (type === 'DRIVE' || type === 'FOLDER') {
+                const res = await window.pywebview.api.choose_folder();
+                if (!res) return;
+                pathToScan = res;
+                document.getElementById('folder-path').innerText = pathToScan;
+            }
+
+            const btn = document.getElementById('scan-btn');
+            btn.innerText = 'Анализ...';
+            btn.disabled = true;
+            
+            document.getElementById('duplicates-list').innerHTML = '';
+            document.getElementById('large-files-list').innerHTML = '';
+            document.getElementById('empty-folders-list').innerHTML = '';
+            clearFilter();
+            
+            const loader = document.getElementById('loader-overlay');
+            loader.classList.add('active');
+            
+            currentDisplayedPercent = 0;
+            targetPercent = 0;
+            document.getElementById('loader-percentage').innerText = '0%';
+            document.getElementById('current-file-display').innerText = 'Ожидание...';
+            
+            showNextTip();
+            clearInterval(tipInterval);
+            tipInterval = setInterval(showNextTip, 5000);
+
+            const res = await window.pywebview.api.start_scan(pathToScan);
+            if (res.error) {
+                alert(res.error);
+                btn.innerText = 'Сканировать';
+                btn.disabled = false;
+                loader.classList.remove('active');
+                clearInterval(tipInterval);
+            }
+        }
+
+        function changeSort(criteria, btn) {
+            document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            currentSort = criteria;
+            renderDuplicates();
+        }
+
+        function clearFilter() {
+            activeFilter = null;
+            document.getElementById('type-filter').classList.remove('active');
+            renderDuplicates();
+        }
+
+                function setFilter(ext) {
+            activeFilter = ext;
+            document.getElementById('filter-ext').innerText = ext;
+            document.getElementById('type-filter').classList.add('active');
+            switchView('view-dups', document.querySelector('.nav-item'));
+            renderDuplicates();
+        }
+
+                function renderDuplicates() {
+            const container = document.getElementById('duplicates-list');
+            container.innerHTML = '';
+            
+            let filtered = activeFilter 
+                ? globalDuplicates.filter(g => g.ext === activeFilter)
+                : [...globalDuplicates];
+
+            if (filtered.length === 0) {
+                let msg = activeFilter 
+                    ? `Среди файлов типа <b>.${activeFilter}</b> дубликатов не найдено.` 
+                    : 'Дубликаты не найдены';
+                container.innerHTML = `<div style="text-align: center; color: var(--text-muted); margin-top: 50px;">${msg}</div>`;
+                return;
+            }
+
+            if (currentSort === 'size') filtered.sort((a, b) => b.size_bytes - a.size_bytes);
+            else if (currentSort === 'name') filtered.sort((a, b) => a.files[0].path.localeCompare(b.files[0].path));
+            else if (currentSort === 'date') filtered.sort((a, b) => b.files[0].mtime - a.files[0].mtime);
+            else if (currentSort === 'type') filtered.sort((a, b) => a.ext.localeCompare(b.ext));
+
+            // Ограничиваем рендеринг максимум 100 группами для плавности
+            const renderLimit = 100;
+            const toRender = filtered.slice(0, renderLimit);
+
+            toRender.forEach(group => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '24px';
+                
+                let pathsHtml = group.files.map(f => {
+                    const safePath = f.path.replace(/"/g, '&quot;');
+                    const dateStr = new Date(f.mtime * 1000).toLocaleDateString('ru-RU', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    const sizeStr = (f.size_bytes / 1024).toFixed(1) + ' КБ';
+                    
+                    return `
+                        <div class="item-row">
+                            <span class="item-path">${f.path}</span>
+                            <span class="item-info">${sizeStr}</span>
+                            <span class="item-info">${dateStr}</span>
+                            <span class="item-type">.${group.ext}</span>
+                            <div class="actions">
+                                <button class="icon-btn" data-path="${safePath}" onclick="handleAction(this, 'open')">Открыть</button>
+                                <button class="icon-btn delete-btn" data-path="${safePath}" onclick="handleAction(this, 'delete')">Удалить</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                let hiddenHtml = '';
+                if (group.hidden_count > 0) {
+                    hiddenHtml = `<div style="padding: 12px 16px; font-size: 12px; color: var(--text-muted); text-align: center; background: var(--bg-item); border-radius: 8px; margin-top: 8px;">... и еще ${group.hidden_count} файлов в этой группе</div>`;
+                }
+                
+                div.innerHTML = `<div class="item-meta" style="margin-bottom: 8px; color: var(--text-muted); font-weight:600;">Группа (${group.count} шт.)</div>${pathsHtml}${hiddenHtml}`;
+                container.appendChild(div);
+            });
+
+            if (filtered.length > renderLimit) {
+                const moreDiv = document.createElement('div');
+                moreDiv.style.textAlign = 'center';
+                moreDiv.style.padding = '20px';
+                moreDiv.style.color = 'var(--text-muted)';
+                moreDiv.innerText = `Показаны первые ${renderLimit} из ${filtered.length} групп. Уточните фильтр или поиск, чтобы увидеть остальные.`;
+                container.appendChild(moreDiv);
+            }
+        }
+
+        async function handleAction(btn, action, isFolder = false) {
+            const path = btn.getAttribute('data-path');
+            if (action === 'open') {
+                await window.pywebview.api.open_folder(path);
+            } else if (action === 'delete') {
+                if (!confirm(`Удалить ${isFolder ? 'папку' : 'файл'}?\n\n${path}`)) return;
+                const res = isFolder 
+                    ? await window.pywebview.api.delete_folder(path)
+                    : await window.pywebview.api.delete_file(path);
+                if (res.status === 'success') {
+                    const row = btn.closest('.item-row');
+                    row.style.opacity = '0';
+                    setTimeout(() => row.remove(), 200);
+                } else {
+                    alert('Ошибка: ' + res.message);
+                }
+            }
+        }
+
+        window.updateUI = function(data) {
+            const loader = document.getElementById('loader-overlay');
+            const fileDisplay = document.getElementById('current-file-display');
+
+            if (data.type === 'status' || data.type === 'progress') {
+                targetPercent = Math.round(data.progress * 100);
+                document.getElementById('progress-bar').style.width = (data.progress * 100) + '%';
+                if (data.current_file) fileDisplay.innerText = data.current_file;
+            }
+
+            if (data.status === 'success') {
+                targetPercent = 100;
+                setTimeout(() => {
+                    loader.classList.remove('active');
+                    clearInterval(tipInterval);
+                    document.getElementById('progress-bar').style.width = '0%';
+                    document.getElementById('scan-btn').innerText = 'Сканировать';
+                    document.getElementById('scan-btn').disabled = false;
+                }, 800);
+
+                document.getElementById('val-total').innerText = data.total_files.toLocaleString('ru-RU');
+                document.getElementById('val-dups').innerText = data.total_groups;
+                document.getElementById('val-space').innerText = data.wasted_mb;
+
+                globalDuplicates = data.duplicates;
+                globalStats = data.stats_ext;
+                renderDuplicates();
+                renderLargeFiles(data.large_files);
+                renderEmptyFolders(data.empty_folders);
+                renderChart();
+                
+            } else if (data.status === 'error') {
+                loader.classList.remove('active');
+                clearInterval(tipInterval);
+                alert("Ошибка: " + data.message);
+                document.getElementById('scan-btn').innerText = 'Сканировать';
+                document.getElementById('scan-btn').disabled = false;
+            }
+        };
+
+        function renderLargeFiles(files) {
+            const container = document.getElementById('large-files-list');
+            container.innerHTML = '';
+            if (!files || files.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 50px;">Файлы не найдены</div>';
+                return;
+            }
+            files.forEach(f => {
+                const safePath = f.path.replace(/"/g, '&quot;');
+                const div = document.createElement('div');
+                div.className = 'item-row';
+                div.innerHTML = `
+                    <span class="item-path">${f.path}</span>
+                    <span class="item-info">${f.size_mb} МБ</span>
+                    <div class="actions" style="grid-column: 5;">
+                        <button class="icon-btn" data-path="${safePath}" onclick="handleAction(this, 'open')">Открыть</button>
+                        <button class="icon-btn delete-btn" data-path="${safePath}" onclick="handleAction(this, 'delete')">Удалить</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function renderEmptyFolders(folders) {
+            const container = document.getElementById('empty-folders-list');
+            container.innerHTML = '';
+            if (!folders || folders.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: var(--text-muted); margin-top: 50px;">Пустых папок нет</div>';
+                return;
+            }
+            folders.forEach(folderPath => {
+                const safePath = folderPath.replace(/"/g, '&quot;');
+                const div = document.createElement('div');
+                div.className = 'item-row';
+                div.innerHTML = `
+                    <span class="item-path" style="grid-column: 1 / 4;">${folderPath}</span>
+                    <div class="actions" style="grid-column: 5;">
+                        <button class="icon-btn" data-path="${safePath}" onclick="handleAction(this, 'open', true)">Открыть</button>
+                        <button class="icon-btn delete-btn" data-path="${safePath}" onclick="handleAction(this, 'delete', true)">Удалить</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function renderChart() {
+            if (!globalStats || Object.keys(globalStats).length === 0) return;
+            
+            const criteria = document.getElementById('chart-criteria').value;
+            const ctx = document.getElementById('myChart').getContext('2d');
+            
+            let sorted = Object.entries(globalStats).sort((a, b) => b[1][criteria] - a[1][criteria]);
+            const top5 = sorted.slice(0, 5);
+            const otherVal = sorted.slice(5).reduce((acc, curr) => acc + curr[1][criteria], 0);
+            
+            const labels = top5.map(item => item[0]);
+            let data = top5.map(item => criteria === 'size' ? (item[1][criteria] / 1024 / 1024).toFixed(1) : item[1][criteria]);
+            
+            if (otherVal > 0) {
+                labels.push('Прочее');
+                data.push(criteria === 'size' ? (otherVal / 1024 / 1024).toFixed(1) : otherVal);
+            }
+
+            if (chartInstance) chartInstance.destroy();
+            
+            const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-main').trim();
+            
+            Chart.defaults.color = textColor;
+            Chart.defaults.font.family = 'Inter';
+
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: [
+                            'rgba(113, 113, 122, 0.8)',
+                            'rgba(161, 161, 170, 0.8)',
+                            'rgba(212, 212, 216, 0.8)',
+                            'rgba(228, 228, 231, 0.9)',
+                            'rgba(244, 244, 245, 0.8)',
+                            'rgba(63, 63, 70, 0.3)'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '80%',
+                    animation: false, 
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const label = labels[index];
+                            if (label !== 'Прочее') setFilter(label);
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: {size: 12, weight: '500'} }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) label += ': ';
+                                    if (criteria === 'size') label += context.parsed + ' МБ';
+                                    else label += context.parsed + ' шт.';
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

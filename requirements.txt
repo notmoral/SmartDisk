@@ -1,3 +1,5 @@
 customtkinter==6.0.0
 darkdetect==0.8.0
 packaging==26.3
+matplotlib==3.9.2
+pywebview==5.3.2
