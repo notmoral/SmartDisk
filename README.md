@@ -25,9 +25,9 @@
 
 **Клонирование репозитория:**
    
-    ```bash
-    git clone https://github.com/notmoral/SmartDisk.git
-    cd SmartDisk
+ ```bash
+ git clone https://github.com/notmoral/SmartDisk.git
+ cd SmartDisk
     
 Настройка виртуального окружения и зависимостей:
 
@@ -36,6 +36,7 @@ python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 pip install maturin
+
 Сборка нативного ядра (Rust):
 Примечание: флаг PYO3_USE_ABI3_FORWARD_COMPATIBILITY необходим для совместимости с новыми версиями Python (например, 3.14).
 
