@@ -3,7 +3,16 @@ import json
 import threading
 import os
 import smartdisk_core
+import sys
 from core.scanner import find_empty_folders, get_all_drives, find_large_files_py
+
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class Api:
     def __init__(self):
@@ -56,6 +65,95 @@ class Api:
 
     def close(self):
         self._window.destroy()
+
+    def start_sorting(self, source_dir, dest_dir, sort_mode="type"):
+        if not source_dir or not dest_dir:
+            return {"error": "Выберите обе папки"}
+
+        def sort_task():
+            try:
+                import shutil
+                import datetime
+                
+                categories = {
+                    'Картинки': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico'],
+                    'Документы': ['.pdf', '.doc', '.docx', '.txt', '.xls', '.xlsx', '.ppt', '.pptx', '.csv'],
+                    'Видео': ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv'],
+                    'Музыка': ['.mp3', '.wav', '.flac', '.aac', '.ogg'],
+                    'Архивы': ['.zip', '.rar', '.7z', '.tar', '.gz'],
+                    'Программы': ['.exe', '.msi', '.bat', '.cmd'],
+                    'Код': ['.py', '.js', '.html', '.css', '.json', '.cpp', '.rs']
+                }
+
+                files = []
+                for item in os.listdir(source_dir):
+                    item_path = os.path.join(source_dir, item)
+                    if os.path.isfile(item_path):
+                        files.append(item_path)
+
+                total_files = len(files)
+                if total_files == 0:
+                    self._send_to_js({"status": "sort_error", "message": "В папке нет файлов для сортировки"})
+                    return
+
+                moved_count = 0
+
+                for i, file_path in enumerate(files):
+                    filename = os.path.basename(file_path)
+                    ext = os.path.splitext(filename)[1].lower()
+
+                    # Логика сортировки
+                    if sort_mode == "date":
+                        # По дате изменения (создаем папки вида "2023-10")
+                        mtime = os.path.getmtime(file_path)
+                        date_str = datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m')
+                        target_folder = date_str
+                    else:
+                        # По типу файла
+                        target_folder = "Другое"
+                        for cat, extensions in categories.items():
+                            if ext in extensions:
+                                target_folder = cat
+                                break
+                        
+                        if target_folder == "Другое" and ext:
+                            target_folder = ext.replace('.', '').upper() + " файлы"
+
+                    # Создаем папку назначения
+                    final_dest = os.path.join(dest_dir, target_folder)
+                    if not os.path.exists(final_dest):
+                        os.makedirs(final_dest)
+
+                    # Обработка дубликатов имен
+                    base_name, extension = os.path.splitext(filename)
+                    counter = 1
+                    new_file_path = os.path.join(final_dest, filename)
+                    while os.path.exists(new_file_path):
+                        new_file_path = os.path.join(final_dest, f"{base_name}_{counter}{extension}")
+                        counter += 1
+
+                    # Перемещаем
+                    try:
+                        shutil.move(file_path, new_file_path)
+                        moved_count += 1
+                    except Exception as e:
+                        print(f"Ошибка при перемещении {filename}: {e}")
+
+                    # Отправляем прогресс
+                    progress = (i + 1) / total_files
+                    self._send_to_js({
+                        "type": "sort_progress", 
+                        "progress": progress, 
+                        "current_file": f"({i+1}/{total_files}) {filename}"
+                    })
+
+                self._send_to_js({"status": "sort_success", "moved": moved_count})
+
+            except Exception as e:
+                self._send_to_js({"status": "sort_error", "message": str(e)})
+
+        threading.Thread(target=sort_task, daemon=True).start()
+        return {"status": "started"}
 
     def start_scan(self, path):
         if not path:
@@ -141,7 +239,7 @@ if __name__ == '__main__':
     api = Api()
     window = webview.create_window(
         'SmartDisk', 
-        'ui/index.html', 
+        resource_path('ui/index.html'), 
         js_api=api, 
         width=1280, 
         height=850, 

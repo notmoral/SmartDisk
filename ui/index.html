@@ -181,6 +181,7 @@
                 <div class="nav-item" onclick="switchView('view-large', this)">Большие файлы</div>
                 <div class="nav-item" onclick="switchView('view-empty', this)">Пустые папки</div>
                 <div class="nav-item" onclick="switchView('view-chart', this)">Статистика</div>
+                <div class="nav-item" onclick="switchView('view-sort', this)">Сортировка</div>
             </div>
 
             <div class="controls">
@@ -223,6 +224,34 @@
 
                 <div class="filter-badge" id="type-filter" onclick="clearFilter()">Фильтр: <span id="filter-ext"></span> ✕</div>
                 <div id="duplicates-list"></div>
+            </div>
+
+                        <div id="view-sort" class="view-container">
+                <div class="list-header">Умный органайзер</div>
+                
+                <div style="background: var(--bg-item); padding: 30px; border-radius: 16px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 20px;">
+                    <p style="color: var(--text-muted); font-size: 14px;">Наведите порядок в папке: программа разложит файлы по категориям.</p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button class="primary" style="background: var(--bg-panel); color: var(--text-main);" onclick="selectSortSource()" id="btn-sort-source">1. Выбрать ОТКУДА</button>
+                            <span id="sort-source-path" style="font-size: 12px; color: var(--text-muted); word-break: break-all; min-height: 30px;">Папка не выбрана</span>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button class="primary" style="background: var(--bg-panel); color: var(--text-main);" onclick="selectSortDest()" id="btn-sort-dest">2. Выбрать КУДА</button>
+                            <span id="sort-dest-path" style="font-size: 12px; color: var(--text-muted); word-break: break-all; min-height: 30px;">Папка не выбрана</span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; align-items: center; margin-top: 10px;">
+                        <select class="chart-select" id="sort-mode" style="flex: 1; padding: 12px;">
+                            <option value="type">Сортировать по типам (Картинки, Видео...)</option>
+                            <option value="date">Сортировать по дате (Год-Месяц)</option>
+                        </select>
+                        <button class="primary" onclick="startSorting()" id="btn-start-sort" style="flex: 1; background: #10b981;">Начать сортировку</button>
+                    </div>
+                </div>
             </div>
 
             <div id="view-large" class="view-container">
@@ -608,16 +637,26 @@
             }
         }
 
-        window.updateUI = function(data) {
+                window.updateUI = function(data) {
             const loader = document.getElementById('loader-overlay');
             const fileDisplay = document.getElementById('current-file-display');
+            const loaderTitle = document.querySelector('.loader-title');
+            const loaderSubtitle = document.querySelector('.loader-subtitle');
 
+            // --- ОБРАБОТКА ПРОГРЕССА СКАНИРОВАНИЯ ---
             if (data.type === 'status' || data.type === 'progress') {
                 targetPercent = Math.round(data.progress * 100);
                 document.getElementById('progress-bar').style.width = (data.progress * 100) + '%';
                 if (data.current_file) fileDisplay.innerText = data.current_file;
             }
 
+            // --- ОБРАБОТКА ПРОГРЕССА СОРТИРОВКИ ---
+            if (data.type === 'sort_progress') {
+                targetPercent = Math.round(data.progress * 100);
+                if (data.current_file) fileDisplay.innerText = data.current_file;
+            }
+
+            // --- ЗАВЕРШЕНИЕ СКАНИРОВАНИЯ ---
             if (data.status === 'success') {
                 targetPercent = 100;
                 setTimeout(() => {
@@ -639,12 +678,40 @@
                 renderEmptyFolders(data.empty_folders);
                 renderChart();
                 
-            } else if (data.status === 'error') {
+            } 
+            // --- ЗАВЕРШЕНИЕ СОРТИРОВКИ ---
+            else if (data.status === 'sort_success') {
+                targetPercent = 100;
+                setTimeout(() => {
+                    loader.classList.remove('active');
+                    
+                    // Возвращаем дефолтные тексты для следующего сканирования
+                    loaderTitle.innerText = "Анализ дискового пространства";
+                    loaderSubtitle.innerText = "Пожалуйста, не закрывайте приложение.";
+                    
+                    const btn = document.getElementById('btn-start-sort');
+                    btn.innerText = 'Начать сортировку';
+                    btn.disabled = false;
+                    alert(`Успешно отсортировано файлов: ${data.moved}`);
+                }, 500);
+            } 
+            // --- ОШИБКИ ---
+            else if (data.status === 'error' || data.status === 'sort_error') {
                 loader.classList.remove('active');
                 clearInterval(tipInterval);
+                
+                if (data.status === 'sort_error') {
+                    loaderTitle.innerText = "Анализ дискового пространства";
+                    loaderSubtitle.innerText = "Пожалуйста, не закрывайте приложение.";
+                    const btn = document.getElementById('btn-start-sort');
+                    btn.innerText = 'Начать сортировку';
+                    btn.disabled = false;
+                } else {
+                    document.getElementById('scan-btn').innerText = 'Сканировать';
+                    document.getElementById('scan-btn').disabled = false;
+                }
+                
                 alert("Ошибка: " + data.message);
-                document.getElementById('scan-btn').innerText = 'Сканировать';
-                document.getElementById('scan-btn').disabled = false;
             }
         };
 
@@ -767,6 +834,62 @@
                     }
                 }
             });
+        }
+
+                // --- ЛОГИКА СОРТИРОВКИ ---
+        let sortSourcePath = null;
+        let sortDestPath = null;
+
+        async function selectSortSource() {
+            const path = await window.pywebview.api.choose_folder();
+            if (path) {
+                sortSourcePath = path;
+                document.getElementById('sort-source-path').innerText = path;
+                document.getElementById('sort-source-path').style.color = 'var(--text-main)';
+            }
+        }
+
+        async function selectSortDest() {
+            const path = await window.pywebview.api.choose_folder();
+            if (path) {
+                sortDestPath = path;
+                document.getElementById('sort-dest-path').innerText = path;
+                document.getElementById('sort-dest-path').style.color = 'var(--text-main)';
+            }
+        }
+
+        async function startSorting() {
+            if (!sortSourcePath || !sortDestPath) {
+                alert("Пожалуйста, выберите обе папки!");
+                return;
+            }
+            if (sortSourcePath === sortDestPath) {
+                alert("Исходная папка и папка назначения не должны совпадать!");
+                return;
+            }
+
+            const mode = document.getElementById('sort-mode').value;
+            const btn = document.getElementById('btn-start-sort');
+            btn.innerText = 'Сортировка...';
+            btn.disabled = true;
+
+            const loader = document.getElementById('loader-overlay');
+            loader.classList.add('active');
+            document.querySelector('.loader-title').innerText = "Сортировка файлов";
+            document.querySelector('.loader-subtitle').innerText = "Раскладываем файлы по папкам...";
+            document.getElementById('current-file-display').innerText = 'Подготовка...';
+            
+            currentDisplayedPercent = 0;
+            targetPercent = 0;
+            document.getElementById('loader-percentage').innerText = '0%';
+
+            const res = await window.pywebview.api.start_sorting(sortSourcePath, sortDestPath, mode);
+            if (res.error) {
+                alert(res.error);
+                btn.innerText = 'Начать сортировку';
+                btn.disabled = false;
+                loader.classList.remove('active');
+            }
         }
     </script>
 </body>
